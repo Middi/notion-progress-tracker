@@ -1,3 +1,5 @@
+// src/app/[projectId]/page.tsx
+
 import ProjectClient from "./ProjectClient"
 import { getProjectWithSubtasks } from "@/lib/notion"
 import { notFound } from "next/navigation"

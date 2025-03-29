@@ -1,9 +1,11 @@
+// /src/lib/notion.ts
 import { Client } from "@notionhq/client"
 
 const notion = new Client({ auth: process.env.NOTION_TOKEN })
 const dbId = process.env.NOTION_PROJECT_DB_ID!
 
 export async function getProjectWithSubtasks(slug: string) {
+  // Step 1: Fetch the main task using the slug
   const mainTaskResponse = await notion.databases.query({
     database_id: dbId,
     filter: {
@@ -15,7 +17,47 @@ export async function getProjectWithSubtasks(slug: string) {
   const mainTask = mainTaskResponse.results[0]
   if (!mainTask) return null
 
-  const mainClientId = mainTask.properties["Client"]?.relation[0]?.id
+  console.log("Main task properties:", mainTask.properties)
+
+  const mainClientId = mainTask.properties["Client"]?.relation?.[0]?.id
+  const mainLaunchDate = mainTask.properties["Launch Date"]?.date?.start ?? null
+
+  // Step 2: Get all tasks for this client with launch dates
+  let allClientTasks: {
+    id: string
+    name: string
+    slug: string
+    launchDate: string | null
+  }[] = []
+
+  if (mainClientId) {
+    const clientTasksResponse = await notion.databases.query({
+      database_id: dbId,
+      filter: {
+        and: [
+          {
+            property: "Client",
+            relation: {
+              contains: mainClientId,
+            },
+          },
+          {
+            property: "Launch Date",
+            date: { is_not_empty: true },
+          },
+        ],
+      },
+    })
+
+    allClientTasks = clientTasksResponse.results.map((task: any) => ({
+      id: task.id,
+      name: task.properties["Content Name"]?.title?.[0]?.plain_text ?? "Untitled",
+      slug: task.properties["Slug"]?.rich_text?.[0]?.plain_text ?? "",
+      launchDate: task.properties["Launch Date"]?.date?.start ?? null,
+    }))
+  }
+
+  // Step 3: Fetch subtasks
   const subItemIds = mainTask.properties["Sub-item"]?.relation.map((rel: any) => rel.id) ?? []
 
   const subtasks = await Promise.all(
@@ -31,35 +73,17 @@ export async function getProjectWithSubtasks(slug: string) {
               avatar: page.properties["Assignee"].people[0].avatar_url,
             }
           : null,
+        clientEditable: page.properties["Client Editable"]?.checkbox ?? false,
+        id: page.id,
       }
     })
   )
 
-  const relatedProjectsResponse = mainClientId
-    ? await notion.databases.query({
-        database_id: dbId,
-        filter: {
-          and: [
-            { property: "Client", relation: { contains: mainClientId } },
-            { property: "Status", status: { does_not_equal: "Done" } },
-            { property: "Status", status: { does_not_equal: "Invoiced" } },
-            { property: "Parent item", relation: { is_empty: true } },
-            { property: "Slug", formula: { string: { does_not_equal: slug } } },
-          ],
-        },
-      })
-    : { results: [] }
-
-  const relatedProjects = relatedProjectsResponse.results.map((proj: any) => ({
-    name: proj.properties["Content Name"]?.title?.[0]?.plain_text ?? "Untitled",
-    slug: proj.properties["Slug"]?.formula?.string ?? "#",
-  }))
-
   return {
     name: mainTask.properties["Content Name"]?.title?.[0]?.plain_text ?? "Untitled",
     status: mainTask.properties["Status"]?.status?.name ?? "No Status",
-    dueDate: mainTask.properties["Due Date"]?.date?.start ?? null,
+    launchDate: mainLaunchDate,
     subtasks,
-    relatedProjects,
+    allClientTasks,
   }
 }

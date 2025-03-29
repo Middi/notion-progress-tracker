@@ -8,9 +8,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
   if (!project) return <>{children}</>
 
   return (
-    <div className="flex">
-      <Sidebar projects={project.relatedProjects} />
-      <main className="flex-1">{children}</main>
-    </div>
+<main className="w-full">{children}</main>
+
   )
 }
