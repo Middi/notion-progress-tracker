@@ -19,7 +19,8 @@
     "lucide-react": "^0.484.0",
     "next": "15.2.3",
     "react": "18.2.0",
-    "react-dom": "18.2.0"
+    "react-dom": "18.2.0",
+    "slugify": "^1.6.6"
   },
   "devDependencies": {
     "@types/node": "^20.10.5",

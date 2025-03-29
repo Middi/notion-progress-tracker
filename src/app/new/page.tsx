@@ -35,16 +35,26 @@ export default function NewEpisodePage() {
     if (res.ok) {
       const data = await res.json();
       const slug = data.slug;
+
+      // 👇 Set flag in sessionStorage to show optimistic subtasks
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("fromNew", "true");
+      }
+
       router.push(`/${slug}`);
     } else {
       alert("Failed to create task");
     }
+
     setLoading(false);
   };
 
   return (
     <div className="min-h-screen flex justify-center items-start p-10 bg-white">
-      <form onSubmit={handleSubmit} className="w-full max-w-md space-y-6 p-6 bg-gray-50 rounded-xl border border-gray-200 shadow">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-md space-y-6 p-6 bg-gray-50 rounded-xl border border-gray-200 shadow"
+      >
         <h1 className="text-2xl font-bold text-center">Create New Episode</h1>
 
         <div>

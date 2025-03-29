@@ -1,4 +1,3 @@
-
 // /src/app/api/new-episode/route.ts
 import { NextResponse } from "next/server";
 import { Client } from "@notionhq/client";
@@ -6,6 +5,21 @@ import { Client } from "@notionhq/client";
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
 const DATABASE_ID = process.env.NOTION_PROJECT_DB_ID!;
 const CLIENTS_DB_ID = process.env.NOTION_CLIENTS_DB_ID!;
+
+const allPossibleSubtasks = [
+  "Files Checked",
+  "Audio Clean",
+  "V1",
+  "Review & Timestamp",
+  "Vertical Clips",
+  "Finalise",
+  "Intro Assemble",
+  "Intro",
+  "Horizontal Clips",
+  "Title, Thumbnail, Description",
+  "Upload Footage",
+  "Publish",
+];
 
 export async function POST(req: Request) {
   try {
@@ -18,6 +32,12 @@ export async function POST(req: Request) {
     const clientPage = await notion.pages.retrieve({ page_id: clientId }) as any;
     const contentDashboard = clientPage.properties["Content Dashboards"]?.relation?.[0]?.id;
     const abbreviation = clientPage.properties["Abbreviation"]?.rich_text?.[0]?.plain_text || "";
+
+    const clientSubtaskPrefs: Record<string, boolean> = {};
+    for (const taskName of allPossibleSubtasks) {
+      const prop = clientPage.properties[taskName];
+      clientSubtaskPrefs[taskName] = prop?.type === "checkbox" ? prop.checkbox : true;
+    }
 
     const response = await notion.pages.create({
       parent: { database_id: DATABASE_ID },
@@ -55,9 +75,7 @@ export async function POST(req: Request) {
       },
     });
 
-    const mainTaskId = response.id; // Use the ID directly
-    console.log("Main task created with ID:", mainTaskId);
-
+    const mainTaskId = response.id;
     const customSlug = generateSlug(`${abbreviation} - ${title}`, mainTaskId);
 
     await notion.pages.update({
@@ -75,11 +93,11 @@ export async function POST(req: Request) {
       },
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    createSubtasks(mainTaskId, title, clientId, abbreviation, contentDashboard, customSlug, clientSubtaskPrefs)
+      .then(() => console.log("✅ Subtasks created"))
+      .catch((err) => console.error("❌ Error creating subtasks:", err));
 
-    await createSubtasks(mainTaskId, title, clientId, abbreviation, contentDashboard, customSlug);
-
-    return NextResponse.json({ success: true, mainTaskId });
+    return NextResponse.json({ success: true, slug: customSlug });
   } catch (error) {
     console.error("Error creating episode:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
@@ -97,30 +115,24 @@ const generateSlug = (title: string, taskId: string) => {
   return `${cleanedTitle}-${shortId}`;
 };
 
-const createSubtasks = async (mainTaskId: string, title: string, clientId: string, abbreviation: string, contentDashboard: string | undefined, slug: string) => {
+const createSubtasks = async (
+  mainTaskId: string,
+  title: string,
+  clientId: string,
+  abbreviation: string,
+  contentDashboard: string | undefined,
+  slug: string,
+  prefs: Record<string, boolean>
+) => {
   const mainTask = await fetchMainTaskById(mainTaskId);
-  
   if (!mainTask) {
     console.error("Main task not found after fetching by ID");
     return;
   }
 
-  const mainTaskProperties = mainTask.properties;
   const guestName = title || "Unknown Guest";
 
-  const subtasks = [
-    "Files Checked",
-    "Audio Cleaned",
-    "V1",
-    "Review & Timestamp",
-    "Vertical Clips",
-    "Finalise",
-    "Intro Assemble",
-    "Intro",
-    "Horizontal Clips",
-    "Title, Thumbnail, Description",
-    "Upload",
-  ];
+  const subtasks = allPossibleSubtasks.filter(name => prefs[name]);
 
   await Promise.all(
     subtasks.map(async (subtaskName) => {

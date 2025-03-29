@@ -1,3 +1,5 @@
+// src/lib/screenshot.ts
+
 import puppeteer from 'puppeteer';
 
 export async function takeScreenshot(slug: string) {

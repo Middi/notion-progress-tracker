@@ -1,7 +1,7 @@
-// src/app/[projectId]/ProjectClient.tsx
+// /src/app/[projectId]/ProjectClient.tsx
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Image from "next/image"
 import { Check, Loader2, Clock3, Send, ArrowLeft, ArrowRight } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -31,11 +31,7 @@ function getStatusIcon(status: string) {
   }
 }
 
-const statusOptions = [
-  "Not started",
-  "In progress",
-  "Done",
-];
+const statusOptions = ["Not started", "In progress", "Done"];
 
 const statusColors: { [key: string]: { bg: string; text: string; dot: string; circle: string } } = {
   "Not started": { bg: "bg-gray-200", text: "text-black", dot: "bg-gray-400", circle: "bg-gray-400" },
@@ -69,7 +65,7 @@ function sortSubtasksSmart(subtasks: any[]) {
     "Priority": 2,
     "On Hold": 2,
     "Not started": 3,
-  }
+  };
 
   return subtasks.sort((a, b) => {
     const aOrder = statusOrder[a.status] ?? 2;
@@ -79,37 +75,98 @@ function sortSubtasksSmart(subtasks: any[]) {
     const aDate = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
     const bDate = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
     return aDate - bDate;
-  })
+  });
 }
 
-export default function ProjectClient({ projectData }: { projectData: any }) {
-  const { name, status, launchDate, subtasks, allClientTasks } = projectData
-  const [subtasksState, setSubtasks] = useState(subtasks)
-  const sortedSubtasks = sortSubtasksSmart(subtasksState)
-  const router = useRouter()
+const allPossibleSubtasks = [
+  "Files Checked",
+  "Audio Clean",
+  "V1",
+  "Review & Timestamp",
+  "Vertical Clips",
+  "Finalise",
+  "Intro Assemble",
+  "Intro",
+  "Horizontal Clips",
+  "Title, Thumbnail, Description",
+  "Upload Footage",
+  "Publish",
+];
 
-  const currentSlug = allClientTasks.find((t: any) => t.name === name)?.slug
-  const sortedByDate = allClientTasks.filter(t => t.launchDate).sort((a, b) => new Date(a.launchDate).getTime() - new Date(b.launchDate).getTime())
-  const currentIndex = sortedByDate.findIndex(t => t.slug === currentSlug)
-  const prevSlug = sortedByDate[currentIndex - 1]?.slug
-  const nextSlug = sortedByDate[currentIndex + 1]?.slug
+export default function ProjectClient({ projectData }: { projectData: any }) {
+  const { slug = "", name, status, launchDate, allClientTasks, subtasks, clientSubtaskPrefs } = projectData;
+  const router = useRouter();
+  const [fromNew, setFromNew] = useState(false);
+  const [subtasksState, setSubtasksState] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && sessionStorage.getItem("fromNew") === "true") {
+      setFromNew(true);
+      sessionStorage.removeItem("fromNew");
+
+      const filteredSubtasks = allPossibleSubtasks
+        .filter(name => clientSubtaskPrefs?.[name] !== false)
+        .map(name => ({ name, status: "Not started", id: name }));
+
+      setSubtasksState(filteredSubtasks);
+    } else {
+      setSubtasksState(subtasks || []);
+    }
+  }, [subtasks, clientSubtaskPrefs]);
+
+  useEffect(() => {
+    if (!fromNew || !slug) return;
+
+    let attempts = 0;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/project?slug=${slug}`);
+        if (!res.ok) throw new Error("Fetch failed");
+
+        const json = await res.json();
+        if (!json || !Array.isArray(json.subtasks)) return;
+
+        if (json.subtasks.length > 0) {
+          setSubtasksState(json.subtasks);
+          clearInterval(interval);
+        } else if (attempts >= 4) {
+          clearInterval(interval);
+          alert("⚠️ Some subtasks failed to create. Please refresh or check Notion.");
+        }
+
+        attempts++;
+      } catch (err) {
+        console.error("Polling error", err);
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [fromNew, slug]);
+
+  const sortedSubtasks = sortSubtasksSmart(subtasksState);
+
+  const currentSlug = allClientTasks.find((t: any) => t.name === name)?.slug;
+  const sortedByDate = allClientTasks.filter(t => t.launchDate).sort((a, b) => new Date(a.launchDate).getTime() - new Date(b.launchDate).getTime());
+  const currentIndex = sortedByDate.findIndex(t => t.slug === currentSlug);
+  const prevSlug = sortedByDate[currentIndex - 1]?.slug;
+  const nextSlug = sortedByDate[currentIndex + 1]?.slug;
 
   const handleStatusChange = async (taskId: string, newStatus: string) => {
     const prevSubtasks = [...subtasksState];
-    setSubtasks((prev) => prev.map((task) => task.id === taskId ? { ...task, status: newStatus } : task))
+    setSubtasksState(prev => prev.map(task => task.id === taskId ? { ...task, status: newStatus } : task));
     try {
       const res = await fetch("/api/update-subtask-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: taskId, status: newStatus }),
-      })
-      if (!res.ok) throw new Error("Request failed")
+      });
+      if (!res.ok) throw new Error("Request failed");
     } catch (error) {
       console.error("❌ Failed to update status:", error);
-      setSubtasks(prevSubtasks);
+      setSubtasksState(prevSubtasks);
       alert("Failed to update status. Please try again.");
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-white text-black p-10 space-y-6 relative">
@@ -205,5 +262,5 @@ export default function ProjectClient({ projectData }: { projectData: any }) {
         )}
       </div>
     </div>
-  )
+  );
 }

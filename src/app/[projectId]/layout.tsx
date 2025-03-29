@@ -1,4 +1,5 @@
-import Sidebar from "@/components/Sidebar"
+// src/app/[projectId]/layout.tsx
+
 import { getProjectWithSubtasks } from "@/lib/notion"
 
 export default async function ProjectLayout({ children, params }: { children: React.ReactNode; params: Promise<{ projectId: string }> }) {

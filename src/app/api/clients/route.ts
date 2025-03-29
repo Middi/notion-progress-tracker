@@ -1,3 +1,5 @@
+// src/app/api/clients/route.ts
+
 import { NextResponse } from "next/server";
 import { Client } from "@notionhq/client";
 
@@ -16,13 +18,17 @@ export async function GET() {
       },
     });
 
+    response.results.forEach((client: any) => {
+      console.log("🔍 Full client properties:", client.properties);
+    });
+
     const clients = response.results.map((page: any) => ({
       id: page.id,
       name: page.properties["Name"]?.title?.[0]?.plain_text || "Untitled",
-      abbreviation: page.properties["Abbreviation"]?.rich_text?.[0]?.plain_text || "", // Extract Abbreviation if available
+      abbreviation: page.properties["Abbreviation"]?.rich_text?.[0]?.plain_text || "",
     }));
 
-    console.log("Fetched clients with abbreviations:", clients);
+    console.log("✅ Fetched clients with abbreviations:", clients);
 
     return NextResponse.json(clients);
   } catch (error) {
